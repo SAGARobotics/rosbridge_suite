@@ -12,6 +12,7 @@
       <param name="certfile" value="$(arg certfile)" />
       <param name="keyfile" value="$(arg keyfile)" />
       <param name="authenticate" value="$(arg authenticate)" />
+      <rosparam command="load" file="$(find rosbridge_server)/launch/rosbridge_safe.yaml"  />
     </node>
   </group>
   <group unless="$(arg ssl)">
