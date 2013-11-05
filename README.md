@@ -55,4 +55,6 @@ service_whitelist: [/rosapi/get_param]
 subscription_whitelist: [/amcl_pose, /mileage, /tf2_web_republisher/status, /tf2_web_republisher/feedback, /tf2_web_republisher/result, /map]
 ```
 
+See https://github.com/strands-project/rosbridge_suite/blob/readonly_capabilities/rosbridge_server/launch/rosbridge_websocket_safe.launch for an example launch file that sets the parameters.
+
 This is part of the [STRANDS project](http://www.strands-project.eu/)
