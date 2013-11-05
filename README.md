@@ -37,7 +37,7 @@ API. Rosbridge clients include:
  * [License (BSD)](http://opensource.org/licenses/BSD-2-Clause)
 
 ### Restricted rosbridge for unsafe web environments
-This branch contains a groovy-devel based version of the rosbridge suite that has some safety features implemented that check that as respectiv action (subcription, publish, call service) is actually allowed before it is executed. This prevents access to topics that should be accessed (e.g. image stream for privacy concerns). This is implemented via 'rosparam' parameter withlists and blacklists. 
+This branch contains a groovy-devel based version of the rosbridge suite that has some safety features implemented that check that as respective action (subcription, publish, call service) is actually allowed before it is executed. This prevents access to topics that shouldn't be accessed (e.g. image stream for privacy concerns). This is implemented via 'rosparam' parameter _whitelists_ and _blacklists_. 
 If all whitelists and blacklists are empty (the default), then the behaviour of the bridge is the same as before, i.e. everything is "bridged". But if a whitelist is not empty, then only topics/services named in the list will be "bridged" all others requests are ignored by this rosbridge implementation. If a blacklist is not empty, then all topics/services listed are explicitly ignored (only makes sense, when whitelist is empty).
 
 The following lists exist and can be configured:
