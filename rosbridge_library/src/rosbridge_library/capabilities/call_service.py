@@ -41,13 +41,13 @@ class CallService(Capability):
     call_service_msg_fields = [(True, "service", (str, unicode)),
            (False, "fragment_size", (int, type(None))), (False, "compression", (str, unicode))]
 
-    allowed_services={}
+    
 
     def __init__(self, protocol):
         # Call superclas constructor
         Capability.__init__(self, protocol)
 
-	self.allowed_services=protocol.allowed_services
+        self.protocol = protocol
 
         # Register the operations that this capability provides
         protocol.register_operation("call_service", self.call_service)
@@ -61,7 +61,10 @@ class CallService(Capability):
 
         # Extract the args
         service = message["service"]
-	if service in self.allowed_services:
+        if self.is_permitted(service,
+                             self.protocol.service_wl,
+                             self.protocol.service_bl):
+
             fragment_size = message.get("fragment_size", None)
             compression = message.get("compression", "none")
             args = message.get("args", [])
@@ -75,8 +78,8 @@ class CallService(Capability):
 
             # Kick off the service caller thread
             ServiceCaller(trim_servicename(service), args, s_cb, e_cb).start()
-	else:
-	    rospy.logwarn("dropping calling service %s. not allowed", service)
+        else:
+            rospy.logwarn("dropping calling service %s. not allowed", service)
 
     def _success(self, cid, service, fragment_size, compression, message):
         outgoing_message = {

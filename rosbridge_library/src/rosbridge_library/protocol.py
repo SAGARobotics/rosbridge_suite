@@ -92,6 +92,7 @@ class Protocol:
         with shared resources
 
         """
+        
         self.client_id = client_id
         self.capabilities = []
         self.operations = {}
@@ -363,4 +364,36 @@ class Protocol:
             rospy.loginfo(stdout_formatted_msg)
         else:
             rospy.logdebug(stdout_formatted_msg)
+
+    def get_advertisement_wl(self):
+        return rospy.get_param("rosbridge/advertisements_whitelist",[]);
+
+
+    def get_subscription_wl(self):
+        return rospy.get_param("rosbridge/subscription_whitelist",[]);
+
+
+    def get_service_wl(self):
+        return rospy.get_param("rosbridge/service_whitelist",[]);
+
+
+    def get_advertisement_bl(self):
+        return rospy.get_param("rosbridge/advertisements_blacklist",[]);
+
+
+    def get_subscription_bl(self):
+        return rospy.get_param("rosbridge/subscription_blacklist",[]);
+
+
+    def get_service_bl(self):
+        return rospy.get_param("rosbridge/service_blacklist",[]);
+
+
+
+    advertisement_wl = property(get_advertisement_wl, None, None, "advertisement_wl's docstring")
+    subscription_wl = property(get_subscription_wl, None, None, "subscription_wl's docstring")
+    service_wl = property(get_service_wl, None, None, "service_wl's docstring")
+    advertisement_bl = property(get_advertisement_bl, None, None, "advertisement_bl's docstring")
+    subscription_bl = property(get_subscription_bl, None, None, "subscription_bl's docstring")
+    service_bl = property(get_service_bl, None, None, "service_bl's docstring")
 

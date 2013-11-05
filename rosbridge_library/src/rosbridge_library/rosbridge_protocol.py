@@ -41,7 +41,7 @@ from rosbridge_library.capabilities.defragmentation import Defragment
 from rosbridge_library.capabilities.advertise_service import AdvertiseService
 from rosbridge_library.capabilities.service_response import ServiceResponse
 from rosbridge_library.capabilities.stop_service import StopService
-
+import rospy
 
 
 class RosbridgeProtocol(Protocol):
@@ -52,10 +52,13 @@ class RosbridgeProtocol(Protocol):
     for cap in rosbridge_capabilities:
         print " -", str(cap)
 
+
     parameters = None
 
     def __init__(self, client_id, parameters = None):
         self.parameters = parameters
         Protocol.__init__(self, client_id)
+        
         for capability_class in self.rosbridge_capabilities:
             self.add_capability(capability_class)
+

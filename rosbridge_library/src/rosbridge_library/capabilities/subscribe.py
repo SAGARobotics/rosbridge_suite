@@ -37,6 +37,8 @@ from rosbridge_library.capability import Capability
 from rosbridge_library.internal.subscribers import manager
 from rosbridge_library.internal.subscription_modifiers import MessageHandler
 from rosbridge_library.internal.pngcompression import encode
+import rospy
+
 try:
     from ujson import dumps
 except ImportError:
@@ -186,6 +188,8 @@ class Subscribe(Capability):
         # Call superclass constructor
         Capability.__init__(self, protocol)
 
+        self.protocol = protocol
+
         # Register the operations that this capability provides
         protocol.register_operation("subscribe", self.subscribe)
         protocol.register_operation("unsubscribe", self.unsubscribe)
@@ -201,24 +205,30 @@ class Subscribe(Capability):
 
         # Make the subscription
         topic = msg["topic"]
-        if not topic in self._subscriptions:
-            client_id = self.protocol.client_id
-            cb = partial(self.publish, topic)
-            self._subscriptions[topic] = Subscription(client_id, topic, cb)
+        if self.is_permitted(topic,
+                             self.protocol.subscription_wl,
+                             self.protocol.subscription_bl):
 
-        # Register the subscriber
-        subscribe_args = {
-          "sid": sid,
-          "msg_type": msg.get("type", None),
-          "throttle_rate": msg.get("throttle_rate", 0),
-          "fragment_size": msg.get("fragment_size", None),
-          "queue_length": msg.get("queue_length", 0),
-          "compression": msg.get("compression", "none")
-        }
-        self._subscriptions[topic].subscribe(**subscribe_args)
-
-        self.protocol.log("info", "Subscribed to %s" % topic)
-
+            if not topic in self._subscriptions:
+                client_id = self.protocol.client_id
+                cb = partial(self.publish, topic)
+                self._subscriptions[topic] = Subscription(client_id, topic, cb)
+        
+            # Register the subscriber
+            subscribe_args = {
+              "sid": sid,
+              "msg_type": msg.get("type", None),
+              "throttle_rate": msg.get("throttle_rate", 0),
+              "fragment_size": msg.get("fragment_size", None),
+              "queue_length": msg.get("queue_length", 0),
+              "compression": msg.get("compression", "none")
+            }
+            self._subscriptions[topic].subscribe(**subscribe_args)
+        
+            self.protocol.log("info", "Subscribed to %s" % topic)
+        else:
+            rospy.logwarn("subscribing to %s not allowed", topic)
+            
     def unsubscribe(self, msg):
         # Pull out the ID
         sid = msg.get("id", None)

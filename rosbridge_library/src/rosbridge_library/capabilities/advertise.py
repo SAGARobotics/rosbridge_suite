@@ -74,14 +74,12 @@ class Advertise(Capability):
     advertise_msg_fields = [(True, "topic", (str, unicode)), (True, "type", (str, unicode))]
     unadvertise_msg_fields = [(True, "topic", (str, unicode))]
 
-    allowed_topics={}
 
     def __init__(self, protocol):
         # Call superclas constructor
         Capability.__init__(self, protocol)
-
-
-	self.allowed_topics=protocol.allowed_topics
+	    
+        self.protocol=protocol
 
         # Register the operations that this capability provides
         protocol.register_operation("advertise", self.advertise)
@@ -90,8 +88,7 @@ class Advertise(Capability):
 
         # Initialize class variables
         self._registrations = {}
-	rospy.loginfo("allowed topics for advertising: %s", self.allowed_topics)
-
+	    
     def advertise(self, message):
         # Pull out the ID
         aid = message.get("id", None)
@@ -100,8 +97,9 @@ class Advertise(Capability):
         topic = message["topic"]
         msg_type = message["type"]
 	
-	if topic in self.allowed_topics:
-
+        if self.is_permitted(topic,
+                             self.protocol.advertisement_wl,
+                             self.protocol.advertisement_bl):
 	        # Create the Registration if one doesn't yet exist
 	        if not topic in self._registrations:
 	            client_id = self.protocol.client_id
@@ -111,6 +109,7 @@ class Advertise(Capability):
 	        self._registrations[topic].register_advertisement(msg_type, aid)
 	else:
 		rospy.logwarn("dropping advertising of topic because it is invalid: %s not allowed", topic)
+
     def unadvertise(self, message):
         # Pull out the ID
         aid = message.get("id", None)

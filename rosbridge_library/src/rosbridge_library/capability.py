@@ -32,7 +32,7 @@
 
 from rosbridge_library.protocol import InvalidArgumentException
 from rosbridge_library.protocol import MissingArgumentException
-
+import rospy
 
 class Capability:
     """ Handles the operation-specific logic of a rosbridge message
@@ -73,6 +73,18 @@ class Capability:
         time to free up resources. """
         pass
 
+    def is_permitted(self, param, whitelist, blacklist):
+        """ checks if the param is in the whitelist (if not empty) and NOT in blacklist"""
+        rospy.logdebug("whitelist=%s",whitelist)
+        rospy.logdebug("blacklist=%s",blacklist)
+        
+        if param in blacklist:
+            return False
+        elif not whitelist:
+            return True
+        else:
+            return param in whitelist
+         
     def basic_type_check(self, msg, types_info):
         """ Performs basic typechecking on fields in msg.
 
