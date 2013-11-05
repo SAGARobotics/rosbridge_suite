@@ -32,7 +32,7 @@
 
 from rosbridge_library.capability import Capability
 from rosbridge_library.internal.publishers import manager
-
+import rospy
 
 class Registration():
     """ Keeps track of how many times a client has requested to advertise
@@ -74,16 +74,23 @@ class Advertise(Capability):
     advertise_msg_fields = [(True, "topic", (str, unicode)), (True, "type", (str, unicode))]
     unadvertise_msg_fields = [(True, "topic", (str, unicode))]
 
+    allowed_topics={}
+
     def __init__(self, protocol):
         # Call superclas constructor
         Capability.__init__(self, protocol)
+
+
+	self.allowed_topics=protocol.allowed_topics
 
         # Register the operations that this capability provides
         protocol.register_operation("advertise", self.advertise)
         protocol.register_operation("unadvertise", self.unadvertise)
 
+
         # Initialize class variables
         self._registrations = {}
+	rospy.loginfo("allowed topics for advertising: %s", self.allowed_topics)
 
     def advertise(self, message):
         # Pull out the ID
@@ -92,15 +99,18 @@ class Advertise(Capability):
         self.basic_type_check(message, self.advertise_msg_fields)
         topic = message["topic"]
         msg_type = message["type"]
+	
+	if topic in self.allowed_topics:
 
-        # Create the Registration if one doesn't yet exist
-        if not topic in self._registrations:
-            client_id = self.protocol.client_id
-            self._registrations[topic] = Registration(client_id, topic)
+	        # Create the Registration if one doesn't yet exist
+	        if not topic in self._registrations:
+	            client_id = self.protocol.client_id
+	            self._registrations[topic] = Registration(client_id, topic)
 
-        # Register, propagating any exceptions
-        self._registrations[topic].register_advertisement(msg_type, aid)
-
+	        # Register, propagating any exceptions
+	        self._registrations[topic].register_advertisement(msg_type, aid)
+	else:
+		rospy.logwarn("dropping advertising of topic because it is invalid: %s not allowed", topic)
     def unadvertise(self, message):
         # Pull out the ID
         aid = message.get("id", None)

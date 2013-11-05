@@ -33,6 +33,7 @@
 from functools import partial
 from rosbridge_library.capability import Capability
 from rosbridge_library.internal.services import ServiceCaller
+import rospy
 
 
 class CallService(Capability):
@@ -40,9 +41,13 @@ class CallService(Capability):
     call_service_msg_fields = [(True, "service", (str, unicode)),
            (False, "fragment_size", (int, type(None))), (False, "compression", (str, unicode))]
 
+    allowed_services={}
+
     def __init__(self, protocol):
         # Call superclas constructor
         Capability.__init__(self, protocol)
+
+	self.allowed_services=protocol.allowed_services
 
         # Register the operations that this capability provides
         protocol.register_operation("call_service", self.call_service)
@@ -56,19 +61,22 @@ class CallService(Capability):
 
         # Extract the args
         service = message["service"]
-        fragment_size = message.get("fragment_size", None)
-        compression = message.get("compression", "none")
-        args = message.get("args", [])
+	if service in self.allowed_services:
+            fragment_size = message.get("fragment_size", None)
+            compression = message.get("compression", "none")
+            args = message.get("args", [])
         
-        # Check for deprecated service ID, eg. /rosbridge/topics#33
-        cid = extract_id(service, cid)
+            # Check for deprecated service ID, eg. /rosbridge/topics#33
+            cid = extract_id(service, cid)
 
-        # Create the callbacks
-        s_cb = partial(self._success, cid, service, fragment_size, compression)
-        e_cb = partial(self._failure, cid)
+            # Create the callbacks
+            s_cb = partial(self._success, cid, service, fragment_size, compression)
+            e_cb = partial(self._failure, cid)
 
-        # Kick off the service caller thread
-        ServiceCaller(trim_servicename(service), args, s_cb, e_cb).start()
+            # Kick off the service caller thread
+            ServiceCaller(trim_servicename(service), args, s_cb, e_cb).start()
+	else:
+	    rospy.logwarn("dropping calling service %s. not allowed", service)
 
     def _success(self, cid, service, fragment_size, compression, message):
         outgoing_message = {

@@ -46,16 +46,20 @@ from rosbridge_library.capabilities.stop_service import StopService
 
 class RosbridgeProtocolRO(Protocol):
     """ Adds the handlers for the rosbridge opcodes """
-    rosbridge_capabilities = [Subscribe, Defragment]
+    rosbridge_capabilities = [CallService, Subscribe, Defragment, Publish, Advertise]
 
     print "registered capabilities (classes):"
     for cap in rosbridge_capabilities:
         print " -", str(cap)
 
     parameters = None
+    allowed_topics = {}
+    allowed_services = {}
 
-    def __init__(self, client_id, parameters = None):
+    def __init__(self, client_id, parameters = None, allowed_topics = {'/tf2_web_republisher/goal', '/tf2_web_republisher/cancel'}, allowed_services = {'/rosapi/get_param'}):
         self.parameters = parameters
+        self.allowed_topics = allowed_topics
+        self.allowed_services = allowed_services
         Protocol.__init__(self, client_id)
         for capability_class in self.rosbridge_capabilities:
             self.add_capability(capability_class)
