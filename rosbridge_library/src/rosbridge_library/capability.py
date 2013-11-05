@@ -75,8 +75,8 @@ class Capability:
 
     def is_permitted(self, param, whitelist, blacklist):
         """ checks if the param is in the whitelist (if not empty) and NOT in blacklist"""
-        rospy.logdebug("whitelist=%s",whitelist)
-        rospy.logdebug("blacklist=%s",blacklist)
+        rospy.logdebug("check %s, whitelist=%s",param, whitelist)
+        rospy.logdebug("check %s, blacklist=%s",param, blacklist)
         
         if param in blacklist:
             return False

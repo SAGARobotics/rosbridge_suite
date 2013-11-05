@@ -97,6 +97,16 @@ class Protocol:
         self.capabilities = []
         self.operations = {}
 
+        if (self.advertisement_wl or self.advertisement_bl or self.service_wl or self.service_bl or self.subscription_wl or self.subscription_bl):
+            rospy.logwarn("SAFE operations enabled. Only selected topics and services are bridged. See below!")
+            rospy.loginfo(" * advertisement_wl=%s", self.advertisement_wl)
+            rospy.loginfo(" * advertisement_bl=%s", self.advertisement_bl)
+            rospy.loginfo(" * service_wl=%s", self.service_wl)
+            rospy.loginfo(" * service_bl=%s", self.service_bl)
+            rospy.loginfo(" * subscription_wl=%s", self.subscription_wl)
+            rospy.loginfo(" * subscription_bl=%s", self.subscription_bl)
+        else:
+            rospy.logwarn("running in UNSAFE mode")
         if self.parameters:
             self.fragment_size = self.parameters["max_message_size"]
             self.delay_between_messages = self.parameters["delay_between_messages"]
@@ -366,27 +376,27 @@ class Protocol:
             rospy.logdebug(stdout_formatted_msg)
 
     def get_advertisement_wl(self):
-        return rospy.get_param("rosbridge/advertisements_whitelist",[]);
+        return rospy.get_param("~advertisements_whitelist",[]);
 
 
     def get_subscription_wl(self):
-        return rospy.get_param("rosbridge/subscription_whitelist",[]);
+        return rospy.get_param("~subscription_whitelist",[]);
 
 
     def get_service_wl(self):
-        return rospy.get_param("rosbridge/service_whitelist",[]);
+        return rospy.get_param("~service_whitelist",[]);
 
 
     def get_advertisement_bl(self):
-        return rospy.get_param("rosbridge/advertisements_blacklist",[]);
+        return rospy.get_param("~advertisements_blacklist",[]);
 
 
     def get_subscription_bl(self):
-        return rospy.get_param("rosbridge/subscription_blacklist",[]);
+        return rospy.get_param("~subscription_blacklist",[]);
 
 
     def get_service_bl(self):
-        return rospy.get_param("rosbridge/service_blacklist",[]);
+        return rospy.get_param("~service_blacklist",[]);
 
 
 
