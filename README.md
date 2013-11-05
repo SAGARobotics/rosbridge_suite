@@ -36,3 +36,23 @@ API. Rosbridge clients include:
  * [Contributors](https://github.com/RobotWebTools/rosbridge_suite/graphs/contributors)
  * [License (BSD)](http://opensource.org/licenses/BSD-2-Clause)
 
+### Restricted rosbridge for unsafe web environments
+This branch contains a groovy-devel based version of the rosbridge suite that has some safety features implemented that check that as respectiv action (subcription, publish, call service) is actually allowed before it is executed. This prevents access to topics that should be accessed (e.g. image stream for privacy concerns). This is implemented via 'rosparam' parameter withlists and blacklists. 
+If all whitelists and blacklists are empty (the default), then the behaviour of the bridge is the same as before, i.e. everything is "bridged". But if a whitelist is not empty, then only topics/services named in the list will be "bridged" all others requests are ignored by this rosbridge implementation. If a blacklist is not empty, then all topics/services listed are explicitly ignored (only makes sense, when whitelist is empty).
+
+The following lists exist and can be configured:
+* `advertisements_whitelist`: e.g. set to `[/tf2_web_republisher/goal, /tf2_web_republisher/cancel]`, default `[]`
+* `advertisements_blacklist`: default `[]`
+* `service_whitelist`: e.g. `[/rosapi/get_param]`, default `[]`
+* `service_blacklist`: default `[]`
+* `subscription_whitelist`: e.g. `[/amcl_pose, /mileage, /tf2_web_republisher/status, /tf2_web_republisher/feedback, /tf2_web_republisher/result, /map]`, default `[]`
+* `subscription_blacklist`: default `[]`
+
+Here's an exemplary YAML file corresponding to the above:
+```
+advertisements_whitelist: [/tf2_web_republisher/goal, /tf2_web_republisher/cancel]
+service_whitelist: [/rosapi/get_param]
+subscription_whitelist: [/amcl_pose, /mileage, /tf2_web_republisher/status, /tf2_web_republisher/feedback, /tf2_web_republisher/result, /map]
+```
+
+This is part of the [STRANDS project](http://www.strands-project.eu/)
