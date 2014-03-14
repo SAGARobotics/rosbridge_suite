@@ -48,7 +48,7 @@ class Publish(Capability):
 
         # Register the operations that this capability provides
         protocol.register_operation("publish", self.publish)
-        
+
         # Save the topics that are published on for the purposes of unregistering
         self._published = {}
 

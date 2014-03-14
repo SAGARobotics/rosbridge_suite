@@ -1,6 +1,7 @@
 # Software License Agreement (BSD License)
 #
 # Copyright (c) 2012, Willow Garage, Inc.
+# Copyright (c) 2014, Creativa 77 SRL
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -88,7 +89,7 @@ class Advertise(Capability):
     def advertise(self, message):
         # Pull out the ID
         aid = message.get("id", None)
-        
+
         self.basic_type_check(message, self.advertise_msg_fields)
         topic = message["topic"]
         msg_type = message["type"]
@@ -103,7 +104,7 @@ class Advertise(Capability):
 	            self._registrations[topic] = Registration(client_id, topic)
 
 	        # Register, propagating any exceptions
-	        self._registrations[topic].register_advertisement(msg_type, aid)
+	        self._registrations[topic].register_advertisement(msg_type, aid, latch)
 	    else:
 		    rospy.logwarn("dropping advertising of topic because it is invalid: %s not allowed", topic)
 

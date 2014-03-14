@@ -92,7 +92,6 @@ class Protocol:
         with shared resources
 
         """
-        
         self.client_id = client_id
         self.capabilities = []
         self.operations = {}

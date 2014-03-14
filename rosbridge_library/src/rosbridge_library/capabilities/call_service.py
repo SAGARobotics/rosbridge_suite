@@ -72,7 +72,7 @@ class CallService(Capability):
 
             # Create the callbacks
             s_cb = partial(self._success, cid, service, fragment_size, compression)
-            e_cb = partial(self._failure, cid)
+            e_cb = partial(self._failure, cid, service)
 
             # Kick off the service caller thread
             ServiceCaller(trim_servicename(service), args, s_cb, e_cb).start()
