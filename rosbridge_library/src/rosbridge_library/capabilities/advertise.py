@@ -1,7 +1,6 @@
 # Software License Agreement (BSD License)
 #
 # Copyright (c) 2012, Willow Garage, Inc.
-# Copyright (c) 2014, Creativa 77 SRL
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -33,7 +32,7 @@
 
 from rosbridge_library.capability import Capability
 from rosbridge_library.internal.publishers import manager
-
+import rospy
 
 class Registration():
     """ Keeps track of how many times a client has requested to advertise
@@ -89,19 +88,24 @@ class Advertise(Capability):
     def advertise(self, message):
         # Pull out the ID
         aid = message.get("id", None)
-
+        
         self.basic_type_check(message, self.advertise_msg_fields)
         topic = message["topic"]
         msg_type = message["type"]
         latch = message.get("latch", False)
 
-        # Create the Registration if one doesn't yet exist
-        if not topic in self._registrations:
-            client_id = self.protocol.client_id
-            self._registrations[topic] = Registration(client_id, topic)
+        if self.is_permitted(topic,
+                             self.protocol.advertisement_wl,
+                             self.protocol.advertisement_bl):
+	        # Create the Registration if one doesn't yet exist
+	        if not topic in self._registrations:
+	            client_id = self.protocol.client_id
+	            self._registrations[topic] = Registration(client_id, topic)
 
-        # Register, propagating any exceptions
-        self._registrations[topic].register_advertisement(msg_type, aid, latch)
+	        # Register, propagating any exceptions
+	        self._registrations[topic].register_advertisement(msg_type, aid)
+	    else:
+		    rospy.logwarn("dropping advertising of topic because it is invalid: %s not allowed", topic)
 
     def unadvertise(self, message):
         # Pull out the ID

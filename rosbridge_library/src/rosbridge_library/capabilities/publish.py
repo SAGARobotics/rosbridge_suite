@@ -33,6 +33,7 @@
 
 from rosbridge_library.capability import Capability
 from rosbridge_library.internal.publishers import manager
+import rospy
 
 
 class Publish(Capability):
@@ -43,9 +44,11 @@ class Publish(Capability):
         # Call superclas constructor
         Capability.__init__(self, protocol)
 
+        self.protocol = protocol
+
         # Register the operations that this capability provides
         protocol.register_operation("publish", self.publish)
-
+        
         # Save the topics that are published on for the purposes of unregistering
         self._published = {}
 
@@ -55,16 +58,22 @@ class Publish(Capability):
         topic = message["topic"]
         latch = message.get("latch", False)
 
-        # Register as a publishing client, propagating any exceptions
-        client_id = self.protocol.client_id
-        manager.register(client_id, topic, latch=latch)
-        self._published[topic] = True
+        if self.is_permitted(topic,
+                             self.protocol.advertisement_wl,
+                             self.protocol.advertisement_bl):
+	        # Register as a publishing client, propagating any exceptions
+	        client_id = self.protocol.client_id
+	        manager.register(client_id, topic, latch=latch)
+	        self._published[topic] = True
 
-        # Get the message if one was provided
-        msg = message.get("msg", {})
+        	# Get the message if one was provided
+	        msg = message.get("msg", {})
 
-        # Publish the message
-        manager.publish(client_id, topic, msg, latch=latch)
+        	# Publish the message
+	        manager.publish(client_id, topic, msg, latch=latch)
+        else:
+            rospy.logwarn("dropping publishing of topic because it is invalid: %s not allowed", topic)
+
         
     def finish(self):
         client_id = self.protocol.client_id

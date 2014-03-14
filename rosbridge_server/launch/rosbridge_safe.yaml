@@ -1,0 +1,3 @@
+advertisements_whitelist: [/tf2_web_republisher/goal, /tf2_web_republisher/cancel]
+service_whitelist: [/rosapi/get_param]
+subscription_whitelist: [/webthrottle/battery_state, /webthrottle/amcl_pose, /webthrottle/mileage, /tf2_web_republisher/status, /tf2_web_republisher/feedback, /tf2_web_republisher/result, /map]
