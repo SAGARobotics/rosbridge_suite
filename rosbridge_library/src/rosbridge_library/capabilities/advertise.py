@@ -98,15 +98,15 @@ class Advertise(Capability):
         if self.is_permitted(topic,
                              self.protocol.advertisement_wl,
                              self.protocol.advertisement_bl):
-	        # Create the Registration if one doesn't yet exist
-	        if not topic in self._registrations:
-	            client_id = self.protocol.client_id
-	            self._registrations[topic] = Registration(client_id, topic)
+                # Create the Registration if one doesn't yet exist
+                if not topic in self._registrations:
+                    client_id = self.protocol.client_id
+                    self._registrations[topic] = Registration(client_id, topic)
 
-	        # Register, propagating any exceptions
-	        self._registrations[topic].register_advertisement(msg_type, aid, latch)
-	    else:
-		    rospy.logwarn("dropping advertising of topic because it is invalid: %s not allowed", topic)
+                # Register, propagating any exceptions
+                self._registrations[topic].register_advertisement(msg_type, aid, latch)
+        else:
+                    rospy.logwarn("dropping advertising of topic because it is invalid: %s not allowed", topic)
 
     def unadvertise(self, message):
         # Pull out the ID
