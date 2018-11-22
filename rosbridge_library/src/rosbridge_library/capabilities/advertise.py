@@ -135,8 +135,8 @@ class Advertise(Capability):
 
                 # Register, propagating any exceptions
                 self._registrations[topic].register_advertisement(msg_type, aid, latch, queue_size)
-        	else:
-        		rospy.logwarn("dropping advertising of topic because it is invalid: %s not allowed", topic)
+            else:
+                rospy.logwarn("dropping advertising of topic because it is invalid: %s not allowed", topic)
 
     def unadvertise(self, message):
         # Pull out the ID
