@@ -31,28 +31,45 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import print_function
 import roslib
 import rospy
 
 from rosbridge_library.internal import ros_loader
 
+import math
 import re
 import string
 from base64 import standard_b64encode, standard_b64decode
 
+from rosbridge_library.util import string_types, bson
 
-type_map = {
-   "bool":    ["bool"],
-   "int":     ["int8", "byte", "uint8", "char",
-               "int16", "uint16", "int32", "uint32",
-               "int64", "uint64", "float32", "float64"],
-   "float":   ["float32", "float64"],
-   "str":     ["string"],
-   "unicode": ["string"],
-   "long":    ["uint64"]
-}
-primitive_types = [bool, int, long, float]
-string_types = [str, unicode]
+import sys
+if sys.version_info >= (3, 0):
+    type_map = {
+    "bool":    ["bool"],
+    "int":     ["int8", "byte", "uint8", "char",
+                "int16", "uint16", "int32", "uint32",
+                "int64", "uint64", "float32", "float64"],
+    "float":   ["float32", "float64"],
+    "str":     ["string"]
+    }
+    primitive_types = [bool, int, float]
+    python2 = False
+else:
+    type_map = {
+    "bool":    ["bool"],
+    "int":     ["int8", "byte", "uint8", "char",
+                "int16", "uint16", "int32", "uint32",
+                "int64", "uint64", "float32", "float64"],
+    "float":   ["float32", "float64"],
+    "str":     ["string"],
+    "unicode": ["string"],
+    "long":    ["int64", "uint64"]
+    }
+    primitive_types = [bool, int, long, float]
+    python2 = True
+
 list_types = [list, tuple]
 ros_time_types = ["time", "duration"]
 ros_primitive_types = ["bool", "byte", "char", "int8", "uint8", "int16",
@@ -61,7 +78,25 @@ ros_primitive_types = ["bool", "byte", "char", "int8", "uint8", "int16",
 ros_header_types = ["Header", "std_msgs/Header", "roslib/Header"]
 ros_binary_types = ["uint8[]", "char[]"]
 list_braces = re.compile(r'\[[^\]]*\]')
+ros_binary_types_list_braces = [("uint8[]", re.compile(r'uint8\[[^\]]*\]')),
+                                ("char[]", re.compile(r'char\[[^\]]*\]'))]
 
+binary_encoder = None
+
+def get_encoder():
+    global binary_encoder
+    if binary_encoder is None:
+        binary_encoder_type = rospy.get_param('~binary_encoder', 'default')
+        bson_only_mode = rospy.get_param('~bson_only_mode', False)
+
+        if binary_encoder_type == 'bson' or bson_only_mode:
+            binary_encoder = bson.Binary
+        elif binary_encoder_type == 'default' or binary_encoder_type == 'b64':
+             binary_encoder = standard_b64encode
+        else:
+            print("Unknown encoder type '%s'"%binary_encoder_type)
+            exit(0)
+    return binary_encoder
 
 class InvalidMessageException(Exception):
     def __init__(self, inst):
@@ -84,7 +119,7 @@ class FieldTypeMismatchException(Exception):
 def extract_values(inst):
     rostype = getattr(inst, "_type", None)
     if rostype is None:
-        raise InvalidMessageException()
+        raise InvalidMessageException(inst=inst)
     return _from_inst(inst, rostype)
 
 
@@ -95,9 +130,11 @@ def populate_instance(msg, inst):
 
 
 def _from_inst(inst, rostype):
-    # Special case for uint8[], we base64 encode the string
-    if rostype in ros_binary_types:
-        return standard_b64encode(inst)
+    # Special case for uint8[], we encode the string
+    for binary_type, expression in ros_binary_types_list_braces:
+        if expression.sub(binary_type, rostype) in ros_binary_types:
+            encoded = get_encoder()(inst)
+            return encoded if python2 else encoded.decode('ascii')
 
     # Check for time or duration
     if rostype in ros_time_types:
@@ -105,6 +142,10 @@ def _from_inst(inst, rostype):
 
     # Check for primitive types
     if rostype in ros_primitive_types:
+        #JSON does not support Inf and NaN. They are mapped to None and encoded as null.
+        if rostype in ["float32", "float64"]:
+            if math.isnan(inst) or math.isinf(inst):
+                return None
         return inst
 
     # Check if it's a list or tuple
@@ -122,9 +163,9 @@ def _from_list_inst(inst, rostype):
 
     # Remove the list indicators from the rostype
     rostype = list_braces.sub("", rostype)
-    
+
     # Shortcut for primitives
-    if rostype in ros_primitive_types:
+    if rostype in ros_primitive_types and not rostype in ["float32", "float64"]:
         return list(inst)
 
     # Call to _to_inst for every element of the list
@@ -142,8 +183,9 @@ def _from_object_inst(inst, rostype):
 
 def _to_inst(msg, rostype, roottype, inst=None, stack=[]):
     # Check if it's uint8[], and if it's a string, try to b64decode
-    if rostype in ros_binary_types:
-        return _to_binary_inst(msg)
+    for binary_type, expression in ros_binary_types_list_braces:
+        if expression.sub(binary_type, rostype) in ros_binary_types:
+            return _to_binary_inst(msg)
 
     # Check the type for time or rostime
     if rostype in ros_time_types:
@@ -168,11 +210,11 @@ def _to_binary_inst(msg):
     if type(msg) in string_types:
         try:
             return standard_b64decode(msg)
-        except:
+        except :
             return msg
     else:
         try:
-            return str(bytearray(msg))
+            return bytes(bytearray(msg))
         except:
             return msg
 
@@ -207,7 +249,7 @@ def _to_primitive_inst(msg, rostype, roottype, stack):
     if msgtype in primitive_types and rostype in type_map[msgtype.__name__]:
         return msg
     elif msgtype in string_types and rostype in type_map[msgtype.__name__]:
-        return msg.encode("ascii", "ignore")
+        return msg.encode("utf-8", "ignore") if python2 else msg
     raise FieldTypeMismatchException(roottype, stack, rostype, msgtype)
 
 
@@ -233,8 +275,11 @@ def _to_object_inst(msg, rostype, roottype, inst, stack):
         raise FieldTypeMismatchException(roottype, stack, rostype, type(msg))
 
     # Substitute the correct time if we're an std_msgs/Header
-    if rostype in ros_header_types:
-        inst.stamp = rospy.get_rostime()
+    try:
+        if rostype in ros_header_types:
+            inst.stamp = rospy.get_rostime()
+    except rospy.exceptions.ROSInitException as e:
+        rospy.logdebug("Not substituting the correct header time: %s" % e)
 
     inst_fields = dict(zip(inst.__slots__, inst._slot_types))
 

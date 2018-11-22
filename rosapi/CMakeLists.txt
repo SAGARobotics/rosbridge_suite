@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(rosapi)
 
-find_package(catkin REQUIRED COMPONENTS rosbridge_library roscpp rospy std_msgs message_generation)
+find_package(catkin REQUIRED COMPONENTS message_generation)
 catkin_python_setup()
 
 add_message_files(
@@ -12,12 +12,14 @@ add_message_files(
 add_service_files(
   FILES
   DeleteParam.srv
+  GetActionServers.srv
   GetParam.srv
   GetParamNames.srv
   GetTime.srv
   HasParam.srv
   MessageDetails.srv
   Nodes.srv
+  NodeDetails.srv
   Publishers.srv
   SearchParam.srv
   ServiceHost.srv
@@ -26,6 +28,7 @@ add_service_files(
   ServiceRequestDetails.srv
   ServiceResponseDetails.srv
   Services.srv
+  ServicesForType.srv
   ServiceType.srv
   SetParam.srv
   Subscribers.srv
@@ -36,14 +39,12 @@ add_service_files(
 
 generate_messages(
   DEPENDENCIES
-  std_msgs
 )
 
 catkin_package(
   CATKIN_DEPENDS message_runtime
 )
 
-install(PROGRAMS scripts/rosapi
+install(PROGRAMS scripts/rosapi_node
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
-

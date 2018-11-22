@@ -49,6 +49,7 @@ _loaded_msgs = {}
 _loaded_srvs = {}
 _msgs_lock = Lock()
 _srvs_lock = Lock()
+_manifest_lock = Lock()
 
 
 class InvalidTypeStringException(Exception):
@@ -60,7 +61,7 @@ class InvalidPackageException(Exception):
     def __init__(self, package, original_exception):
         Exception.__init__(self,
            "Unable to load the manifest for package %s. Caused by: %s"
-           % (package, original_exception.message)
+           % (package, str(original_exception))
        )
 
 
@@ -179,11 +180,11 @@ def _load_class(modname, subname, classname):
     global loaded_modules
 
     try:
-        # roslib maintains a cache of loaded manifests, so no need to duplicate
-        roslib.launcher.load_manifest(modname)
+        with _manifest_lock:
+            # roslib maintains a cache of loaded manifests, so no need to duplicate
+            roslib.launcher.load_manifest(modname)
     except Exception as exc:
         raise InvalidPackageException(modname, exc)
-
 
     try:
         pypkg = __import__('%s.%s' % (modname, subname))

@@ -30,9 +30,9 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from rosbridge_library.protocol import InvalidArgumentException
-from rosbridge_library.protocol import MissingArgumentException
 import rospy
+from rosbridge_library.internal.exceptions import InvalidArgumentException
+from rosbridge_library.internal.exceptions import MissingArgumentException
 
 class Capability:
     """ Handles the operation-specific logic of a rosbridge message

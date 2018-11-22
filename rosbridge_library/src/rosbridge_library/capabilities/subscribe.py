@@ -30,6 +30,7 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+import fnmatch
 from threading import Lock
 from functools import partial
 from rospy import loginfo
@@ -46,6 +47,8 @@ except ImportError:
         from simplejson import dumps
     except ImportError:
         from json import dumps
+
+from rosbridge_library.util import string_types
 
 
 class Subscription():
@@ -101,8 +104,6 @@ class Subscription():
         compression is to be used (current valid values are 'png')
 
          """
-        # Subscribe with the manager. This will propagate any exceptions
-        manager.subscribe(self.client_id, self.topic, self.on_msg, msg_type)
 
         client_details = {
             "throttle_rate": throttle_rate,
@@ -114,6 +115,9 @@ class Subscription():
         self.clients[sid] = client_details
 
         self.update_params()
+
+        # Subscribe with the manager. This will propagate any exceptions
+        manager.subscribe(self.client_id, self.topic, self.on_msg, msg_type)
 
     def unsubscribe(self, sid=None):
         """ Unsubscribe this particular client's subscription
@@ -179,10 +183,12 @@ class Subscription():
 
 class Subscribe(Capability):
 
-    subscribe_msg_fields = [(True, "topic", (str, unicode)), (False, "type", (str, unicode)),
-        (False, "throttle_rate", int), (False, "fragment_size", int),
-        (False, "queue_length", int), (False, "compression", (str, unicode))]
-    unsubscribe_msg_fields = [(True, "topic", (str, unicode))]
+    subscribe_msg_fields = [(True, "topic", string_types), (False, "type", string_types),
+                            (False, "throttle_rate", int), (False, "fragment_size", int),
+                            (False, "queue_length", int), (False, "compression", string_types)]
+    unsubscribe_msg_fields = [(True, "topic", string_types)]
+
+    topics_glob = None
 
     def __init__(self, protocol):
         # Call superclass constructor
@@ -199,7 +205,7 @@ class Subscribe(Capability):
     def subscribe(self, msg):
         # Pull out the ID
         sid = msg.get("id", None)
-        
+
         # Check the args
         self.basic_type_check(msg, self.subscribe_msg_fields)
 
@@ -209,11 +215,25 @@ class Subscribe(Capability):
                              self.protocol.subscription_wl,
                              self.protocol.subscription_bl):
 
+            if Subscribe.topics_glob is not None and Subscribe.topics_glob:
+                self.protocol.log("debug", "Topic security glob enabled, checking topic: " + topic)
+                match = False
+                for glob in Subscribe.topics_glob:
+                    if (fnmatch.fnmatch(topic, glob)):
+                        self.protocol.log("debug", "Found match with glob " + glob + ", continuing subscription...")
+                        match = True
+                        break
+                if not match:
+                    self.protocol.log("warn", "No match found for topic, cancelling subscription to: " + topic)
+                    return
+            else:
+                self.protocol.log("debug", "No topic security glob, not checking subscription.")
+
             if not topic in self._subscriptions:
                 client_id = self.protocol.client_id
                 cb = partial(self.publish, topic)
                 self._subscriptions[topic] = Subscription(client_id, topic, cb)
-        
+
             # Register the subscriber
             subscribe_args = {
               "sid": sid,
@@ -224,7 +244,7 @@ class Subscribe(Capability):
               "compression": msg.get("compression", "none")
             }
             self._subscriptions[topic].subscribe(**subscribe_args)
-        
+
             self.protocol.log("info", "Subscribed to %s" % topic)
         else:
             rospy.logwarn("subscribing to %s not allowed", topic)
@@ -232,10 +252,24 @@ class Subscribe(Capability):
     def unsubscribe(self, msg):
         # Pull out the ID
         sid = msg.get("id", None)
-        
+
         self.basic_type_check(msg, self.unsubscribe_msg_fields)
 
         topic = msg["topic"]
+        if Subscribe.topics_glob is not None and Subscribe.topics_glob:
+            self.protocol.log("debug", "Topic security glob enabled, checking topic: " + topic)
+            match = False
+            for glob in Subscribe.topics_glob:
+                if (fnmatch.fnmatch(topic, glob)):
+                    self.protocol.log("debug", "Found match with glob " + glob + ", continuing unsubscription...")
+                    match = True
+                    break
+            if not match:
+                self.protocol.log("warn", "No match found for topic, cancelling unsubscription from: " + topic)
+                return
+        else:
+            self.protocol.log("debug", "No topic security glob, not checking unsubscription.")
+
         if topic not in self._subscriptions:
             return
         self._subscriptions[topic].unsubscribe(sid)
@@ -260,8 +294,22 @@ class Subscribe(Capability):
 
         """
         # TODO: fragmentation, proper ids
+        if Subscribe.topics_glob and Subscribe.topics_glob:
+            self.protocol.log("debug", "Topic security glob enabled, checking topic: " + topic)
+            match = False
+            for glob in Subscribe.topics_glob:
+                if (fnmatch.fnmatch(topic, glob)):
+                    self.protocol.log("debug", "Found match with glob " + glob + ", continuing topic publish...")
+                    match = True
+                    break
+            if not match:
+                self.protocol.log("warn", "No match found for topic, cancelling topic publish to: " + topic)
+                return
+        else:
+            self.protocol.log("debug", "No topic security glob, not checking topic publish.")
+
         outgoing_msg = {"op": "publish", "topic": topic, "msg": message}
-        if compression=="png":
+        if compression == "png":
             outgoing_msg_dumped = dumps(outgoing_msg)
             outgoing_msg = {"op": "png", "data": encode(outgoing_msg_dumped)}
         self.protocol.send(outgoing_msg)

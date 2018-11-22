@@ -9,6 +9,7 @@ from roscpp.srv import GetLoggers
 
 from json import loads, dumps
 from std_msgs.msg import String
+from std_srvs.srv import SetBool
 
 from rosbridge_library.capabilities.call_service import CallService
 from rosbridge_library.protocol import Protocol
@@ -34,29 +35,67 @@ class TestCallService(unittest.TestCase):
         self.assertRaises(InvalidArgumentException, s.call_service, msg)
 
     def test_call_service_works(self):
-        # First, call the service the 'proper' way
-        p = rospy.ServiceProxy("/rosout/get_loggers", GetLoggers)
-        ret = p()
-
+        # Prepare to call the service the 'proper' way
+        p = rospy.ServiceProxy(rospy.get_name() + "/get_loggers", GetLoggers)
+        p.wait_for_service()
+        time.sleep(1.0)
 
         proto = Protocol("test_call_service_works")
         s = CallService(proto)
-        msg = loads(dumps({"op": "call_service", "service": "/rosout/get_loggers"}))
+        msg = loads(dumps({"op": "call_service", "service": rospy.get_name() + "/get_loggers"}))
 
-        received = {"msg": None}
+        received = {"msg": None, "arrived": False}
 
         def cb(msg, cid=None):
             received["msg"] = msg
+            received["arrived"] = True
 
         proto.send = cb
 
         s.call_service(msg)
 
-        time.sleep(0.5)
+        timeout = 5.0
+        start = rospy.Time.now()
+        while rospy.Time.now() - start < rospy.Duration(timeout):
+            if received["arrived"]:
+                break
+            time.sleep(0.1)
 
+        # The rosbridge service call actually causes another logger to appear,
+        # so do the "regular" service call after that.
+        ret = p()
+
+        self.assertTrue(received["msg"]["result"])
         for x, y in zip(ret.loggers, received["msg"]["values"]["loggers"]):
             self.assertEqual(x.name, y["name"])
             self.assertEqual(x.level, y["level"])
+
+    def test_call_service_fail(self):
+        # Dummy service that instantly fails
+        service_server = rospy.Service("set_bool_fail", SetBool,
+                                       lambda req: None)
+
+        proto = Protocol("test_call_service_fail")
+        s = CallService(proto)
+        send_msg = loads(dumps({"op": "call_service", "service": rospy.get_name() + "/set_bool_fail", "args": '[ true ]'}))
+
+        received = {"msg": None, "arrived": False}
+        def cb(msg, cid=None):
+            received["msg"] = msg
+            received["arrived"] = True
+
+        proto.send = cb
+
+        s.call_service(send_msg)
+
+        timeout = 5.0
+        start = rospy.Time.now()
+        while rospy.Time.now() - start < rospy.Duration(timeout):
+            if received["arrived"]:
+                break
+            time.sleep(0.1)
+
+        self.assertFalse(received["msg"]["result"])
 
 
 PKG = 'rosbridge_library'
