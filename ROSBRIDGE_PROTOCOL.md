@@ -85,7 +85,11 @@ ROS operations:
   * **advertise** – advertise that you are publishing a topic
   * **unadvertise** – stop advertising that you are publishing topic publish - a published ROS-message
   * **subscribe** - a request to subscribe to a topic
-  * **unsubscribe** - a request to unsubscribe from a topic call_service - a service call
+  * **unsubscribe** - a request to unsubscribe from a topic
+  * **call_service** - a service call
+  * **advertise_service** - advertise an external service server
+  * **unadvertise_service** - unadvertise an external service server
+  * **service_request** - a service request
   * **service_response** - a service response
 
 In general, actions or operations that the client takes (such as publishing and
@@ -280,8 +284,8 @@ the advertise command.
      type, then the topic will be established with this type.
    * If the topic already exists with a different type, an error status message
      is sent and this message is dropped.
-   * If the topic already exists with the same type, a warning status message
-     is sent and this message is dropped.
+   * If the topic already exists with the same type, the sender of this message
+     is registered as another publisher.
    * If the topic doesnt already exist but the type cannot be resolved, then an
      error status message is sent and this message is dropped.
 
@@ -300,6 +304,8 @@ This stops advertising that you are publishing a topic.
 
    * If the topic does not exist, a warning status message is sent and this
      message is dropped
+   * If the topic exists and there are still clients left advertising it,
+     rosbridge will continue to advertise it until all of them have unadvertised
    * If the topic exists but rosbridge is not advertising it, a warning status
      message is sent and this message is dropped
 
@@ -360,7 +366,7 @@ which to send messages.
  * **throttle_rate** – the minimum amount of time (in ms) that must elapse
     between messages being sent. Defaults to 0
  * **queue_length** – the size of the queue to buffer messages. Messages are
-    buffered as a result of the throttle_rate. Defaults to 1.
+    buffered as a result of the throttle_rate. Defaults to 0 (no queueing).
  * **id** – if specified, then this specific subscription can be unsubscribed
     by referencing the ID.
  * **fragment_size** – the maximum size that a message can take before it is to
@@ -417,13 +423,40 @@ Calls a ROS service
  * **compression** – an optional string to specify the compression scheme to be
     used on messages. Valid values are "none" and "png"
 
-#### 3.4.7 Service Response
+#### 3.4.7 Advertise Service
+
+```json
+{ "op": "advertise_service",
+  "type": <string>,
+  "service": <string>
+}
+```
+
+Advertises an external ROS service server. Requests come to the client via Call Service.
+
+ * **service** – the name of the service to advertise
+ * **type** – the advertised service message type
+
+#### 3.4.8 Unadvertise Service
+
+```json
+{ "op": "unadvertise_service",
+  "service": <string>
+}
+```
+
+Stops advertising an external ROS service server
+
+ * **service** – the name of the service to unadvertise
+
+#### 3.4.9 Service Response
 
 ```json
 { "op": "service_response",
   (optional) "id": <string>,
   "service": <string>,
-  (optional) "values": <list<json>>
+  (optional) "values": <list<json>>,
+  "result": <boolean>
 }
 ```
 
@@ -434,6 +467,7 @@ A response to a ROS service call
     this field can be omitted (and will be by the rosbridge server)
  * **id** – if an ID was provided to the service request, then the service
     response will contain the ID
+ * **result** - return value of service callback. true means success, false failure.
 
 ## 4 Further considerations
 
@@ -456,11 +490,6 @@ sample a single message from a topic.
 Rosbridge will support messages that were latched to topics internally in ROS.
 It is possible that the publish opcode will be extended so that remote clients
 can latch messages too.
-
-### 4.4 Advertising Services
-
-Rosbridge currently does not support services advertised by the remote client.
-It could be extended to support this.
 
 ### 4.5 Rosbridge package structure
 

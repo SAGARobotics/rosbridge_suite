@@ -49,7 +49,7 @@ class TestSubscribe(unittest.TestCase):
             self.assertEqual(subscription.fragment_size, min_frag_size)
             self.assertEqual(subscription.compression, "none")
 
-            subscription.clients.values()[0]["compression"] = "png"
+            list(subscription.clients.values())[0]["compression"] = "png"
 
             subscription.update_params()
 
@@ -108,7 +108,7 @@ class TestSubscribe(unittest.TestCase):
 
         sub.subscribe(loads(dumps({"op": "subscribe", "topic": topic, "type": msg_type})))
 
-        p = rospy.Publisher(topic, String)
+        p = rospy.Publisher(topic, String, queue_size=5)
         time.sleep(0.25)
         p.publish(msg)
 

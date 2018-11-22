@@ -30,16 +30,21 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+import fnmatch
 from functools import partial
 from rosbridge_library.capability import Capability
 from rosbridge_library.internal.services import ServiceCaller
 import rospy
+from rosbridge_library.util import string_types
 
 
 class CallService(Capability):
 
-    call_service_msg_fields = [(True, "service", (str, unicode)),
-           (False, "fragment_size", (int, type(None))), (False, "compression", (str, unicode))]
+    call_service_msg_fields = [(True, "service", string_types),
+                               (False, "fragment_size", (int, type(None))),
+                               (False, "compression", string_types)]
+
+    services_glob = None
 
     
 
@@ -55,7 +60,7 @@ class CallService(Capability):
     def call_service(self, message):
         # Pull out the ID
         cid = message.get("id", None)
-        
+
         # Typecheck the args
         self.basic_type_check(message, self.call_service_msg_fields)
 
@@ -68,13 +73,27 @@ class CallService(Capability):
             fragment_size = message.get("fragment_size", None)
             compression = message.get("compression", "none")
             args = message.get("args", [])
-        
+
+            if CallService.services_glob is not None and CallService.services_glob:
+                self.protocol.log("debug", "Service security glob enabled, checking service: " + service)
+                match = False
+                for glob in CallService.services_glob:
+                    if (fnmatch.fnmatch(service, glob)):
+                        self.protocol.log("debug", "Found match with glob " + glob + ", continuing service call...")
+                        match = True
+                        break
+                if not match:
+                    self.protocol.log("warn", "No match found for service, cancelling service call for: " + service)
+                    return
+            else:
+                self.protocol.log("debug", "No service security glob, not checking service call.")
+
             # Check for deprecated service ID, eg. /rosbridge/topics#33
             cid = extract_id(service, cid)
 
             # Create the callbacks
             s_cb = partial(self._success, cid, service, fragment_size, compression)
-            e_cb = partial(self._failure, cid)
+            e_cb = partial(self._failure, cid, service)
 
             # Kick off the service caller thread
             ServiceCaller(trim_servicename(service), args, s_cb, e_cb).start()
@@ -85,16 +104,27 @@ class CallService(Capability):
         outgoing_message = {
             "op": "service_response",
             "service": service,
-            "values": message
+            "values": message,
+            "result": True
         }
         if cid is not None:
             outgoing_message["id"] = cid
         # TODO: fragmentation, compression
         self.protocol.send(outgoing_message)
 
-    def _failure(self, cid, exc):
+    def _failure(self, cid, service, exc):
         self.protocol.log("error", "call_service %s: %s" %
-            (type(exc).__name__, str(exc)), cid)
+                          (type(exc).__name__, str(exc)), cid)
+        # send response with result: false
+        outgoing_message = {
+            "op": "service_response",
+            "service": service,
+            "values": str(exc),
+            "result": False
+        }
+        if cid is not None:
+            outgoing_message["id"] = cid
+        self.protocol.send(outgoing_message)
 
 
 def trim_servicename(service):

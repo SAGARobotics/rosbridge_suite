@@ -1,15 +1,10 @@
 #!/usr/bin/python
+from __future__ import print_function
 import sys
 import socket
 import time
 from random import randint
-try:
-    import ujson as json
-except ImportError:
-    try:
-        import simplejson as json
-    except ImportError:
-        import json
+from rosbridge_library.util import json
 
 
 ####################### variables begin ########################################
@@ -22,8 +17,7 @@ max_msg_length = 20000                           # bytes
 rosbridge_ip = "localhost"                       # hostname or ip
 rosbridge_port = 9090                            # port as integer
 
-service_module = "rosbridge_library"         # make sure srv and msg files are available within specified module on rosbridge-server!
-service_type = "SendBytes"                       # make sure this matches an existing service type on rosbridge-server (in specified srv_module)
+service_type = "rosbridge_library/SendBytes"                       # make sure this matches an existing service type on rosbridge-server (in specified srv_module)
 service_name = "send_bytes"                      # service name
 
 send_fragment_size = 1000
@@ -50,7 +44,7 @@ def calculate_service_response(request):
         #message += str(chr(randint(32,126)))
         message+= str(chr(randint(32,126)))
         if i% 100000 == 0:
-            print count - i, "bytes left to generate"
+            print(count - i, "bytes left to generate")
 
     """
     IMPORTANT!
@@ -61,8 +55,9 @@ def calculate_service_response(request):
     service_response_data = { "data": message}                                  # service response (as defined in srv-file)
 
     response_object = { "op": "service_response",
-                        "request_id": request_object["request_id"],
-                        "data": service_response_data                           # put service response in "data"-field of response object (in this case it's twice "data", because response value is also named data (in srv-file)
+                        "id": request_object["id"],
+                        "service": service_name,
+                        "values": service_response_data                           # put service response in "data"-field of response object (in this case it's twice "data", because response value is also named data (in srv-file)
                       }
     response_message = json.dumps(response_object)
     return response_message
@@ -84,10 +79,9 @@ def connect_tcp_socket():
     return tcp_sock
 
 def advertise_service():                                                        # advertise service
-    advertise_message_object = {"op":"advertise_service",                       
-                                "service_module": service_module,
-                                "service_type": service_type,
-                                "service_name": service_name,
+    advertise_message_object = {"op":"advertise_service",
+                                "type": service_type,
+                                "service": service_name,
                                 "fragment_size": receive_fragment_size,
                                 "message_intervall": receive_message_intervall
                                 }
@@ -95,8 +89,8 @@ def advertise_service():                                                        
     tcp_socket.send(str(advertise_message))
 
 def unadvertise_service():                                                      # unadvertise service
-    unadvertise_message_object = {"op":"stop_service",                           
-                                  "service_name": service_name
+    unadvertise_message_object = {"op":"unadvertise_service",
+                                  "service": service_name
                                  }
     unadvertise_message = json.dumps(unadvertise_message_object)                   
     tcp_socket.send(str(unadvertise_message))
@@ -111,22 +105,22 @@ def wait_for_service_request():                                                 
         while not done:
             incoming = tcp_socket.recv(max_msg_length)                          # get data from socket
             if incoming == '':
-                print "connection closed by peer"
+                print("connection closed by peer")
                 sys.exit(1)
             buffer = buffer + incoming                                          # append data to buffer
             try:                                                                # try to parse JSON from buffer
                 data_object = json.loads(buffer)
-                if data_object["op"] == "service_request":
+                if data_object["op"] == "call_service":
                     data = buffer
                     done = True
                     return data                                                 # if parsing was successful --> return data string
-            except Exception, e:
+            except Exception as e:
                 #print "direct_access error:"
                 #print e
                 pass
                
             #print "trying to defragment"
-            try:                                                                # opcode was not "service_request" -> try to defragment
+            try:                                                                # opcode was not "call_service" -> try to defragment
                 result_string = buffer.split("}{")                              # split buffer into fragments and re-fill with curly brackets
                 result = []
                 for fragment in result_string:
@@ -154,17 +148,17 @@ def wait_for_service_request():                                                 
                         #print "reconstructed", reconstructed
                         buffer = ""                                             # empty buffer
                         done = True
-                        print "reconstructed message from", len(result), "fragments"
+                        print("reconstructed message from", len(result), "fragments")
                         #print reconstructed
                         return reconstructed
-                except Exception, e:
-                    print "not possible to defragment:", buffer
-                    print e
-            except Exception, e:
-                print "defrag_error:", buffer
-                print e
+                except Exception as e:
+                    print("not possible to defragment:", buffer)
+                    print(e)
+            except Exception as e:
+                print("defrag_error:", buffer)
+                print(e)
                 pass
-    except Exception, e:
+    except Exception as e:
         #print "network-error(?):", e
         pass
     return data
@@ -211,7 +205,7 @@ def list_of_fragments(full_message, fragment_size):                             
 
 tcp_socket = connect_tcp_socket()                                               # open tcp_socket
 advertise_service()                                                             # advertise service in ROS (via rosbridge)
-print "service provider started and waiting for requests"
+print("service provider started and waiting for requests")
 
 try:                                                                            # allows to catch KeyboardInterrupt
     while True:                                                                 # loop forever (or until ctrl-c is pressed)
@@ -223,21 +217,21 @@ try:                                                                            
           elif data != None and len(data) > 0:                                  # received service_request (or at least some data..)
             response = calculate_service_response(data)                         # generate service_response
 
-            print "response calculated, now splitting into fragments.."
+            print("response calculated, now splitting into fragments..")
             fragment_list = list_of_fragments(response, send_fragment_size)     # generate fragments to send to rosbridge
 
-            print "sending", len(fragment_list), "messages as response"
+            print("sending", len(fragment_list), "messages as response")
             for fragment in fragment_list:
                 #print "sending:" ,fragment
                 send_service_response(fragment)                                 # send service_response to rosbridge (or fragments; just send any list entry)
                 time.sleep(send_fragment_delay)                                 # (not needed if using patched rosbridge protocol.py)
-        except Exception, e:
-          print e
+        except Exception as e:
+          print(e)
           pass
 except KeyboardInterrupt:
     try:
         unadvertise_service()                                                   # unadvertise service
         tcp_socket.close()                                                      # close tcp_socket
-    except Exception, e:
-        print e
-    print "non-ros_service_server stopped because user pressed \"Ctrl-C\""
+    except Exception as e:
+        print(e)
+    print("non-ros_service_server stopped because user pressed \"Ctrl-C\"")

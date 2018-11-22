@@ -1,6 +1,7 @@
 # Software License Agreement (BSD License)
 #
 # Copyright (c) 2012, Willow Garage, Inc.
+# Copyright (c) 2014, Creativa 77 SRL
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -30,9 +31,11 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+import fnmatch
 from rosbridge_library.capability import Capability
 from rosbridge_library.internal.publishers import manager
 import rospy
+from rosbridge_library.util import string_types
 
 class Registration():
     """ Keeps track of how many times a client has requested to advertise
@@ -53,9 +56,9 @@ class Registration():
     def unregister(self):
         manager.unregister(self.client_id, self.topic)
 
-    def register_advertisement(self, msg_type, adv_id=None):
+    def register_advertisement(self, msg_type, adv_id=None, latch=False, queue_size=100):
         # Register with the publisher manager, propagating any exception
-        manager.register(self.client_id, self.topic, msg_type)
+        manager.register(self.client_id, self.topic, msg_type, latch=latch, queue_size=queue_size)
 
         self.clients[adv_id] = True
 
@@ -71,8 +74,10 @@ class Registration():
 
 class Advertise(Capability):
 
-    advertise_msg_fields = [(True, "topic", (str, unicode)), (True, "type", (str, unicode))]
-    unadvertise_msg_fields = [(True, "topic", (str, unicode))]
+    advertise_msg_fields = [(True, "topic", string_types), (True, "type", string_types)]
+    unadvertise_msg_fields = [(True, "topic", string_types)]
+
+    topics_glob = None
 
 
     def __init__(self, protocol):
@@ -85,14 +90,15 @@ class Advertise(Capability):
         protocol.register_operation("advertise", self.advertise)
         protocol.register_operation("unadvertise", self.unadvertise)
 
-
         # Initialize class variables
         self._registrations = {}
-	    
+        if protocol.parameters and "unregister_timeout" in protocol.parameters:
+            manager.unregister_timeout = protocol.parameters.get("unregister_timeout")
+
     def advertise(self, message):
         # Pull out the ID
         aid = message.get("id", None)
-        
+
         self.basic_type_check(message, self.advertise_msg_fields)
         topic = message["topic"]
         msg_type = message["type"]
@@ -105,10 +111,32 @@ class Advertise(Capability):
 	            client_id = self.protocol.client_id
 	            self._registrations[topic] = Registration(client_id, topic)
 
-	        # Register, propagating any exceptions
-	        self._registrations[topic].register_advertisement(msg_type, aid)
-	else:
-		rospy.logwarn("dropping advertising of topic because it is invalid: %s not allowed", topic)
+                latch = message.get("latch", False)
+                queue_size = message.get("queue_size", 100)
+
+                if Advertise.topics_glob is not None and Advertise.topics_glob:
+                    self.protocol.log("debug", "Topic security glob enabled, checking topic: " + topic)
+                    match = False
+                    for glob in Advertise.topics_glob:
+                        if (fnmatch.fnmatch(topic, glob)):
+                            self.protocol.log("debug", "Found match with glob " + glob + ", continuing advertisement...")
+                            match = True
+                            break
+                    if not match:
+                        self.protocol.log("warn", "No match found for topic, cancelling advertisement of: " + topic)
+                        return
+                else:
+                    self.protocol.log("debug", "No topic security glob, not checking advertisement.")
+
+                # Create the Registration if one doesn't yet exist
+                if not topic in self._registrations:
+                    client_id = self.protocol.client_id
+                    self._registrations[topic] = Registration(client_id, topic)
+
+                # Register, propagating any exceptions
+                self._registrations[topic].register_advertisement(msg_type, aid, latch, queue_size)
+        	else:
+        		rospy.logwarn("dropping advertising of topic because it is invalid: %s not allowed", topic)
 
     def unadvertise(self, message):
         # Pull out the ID
@@ -116,6 +144,20 @@ class Advertise(Capability):
 
         self.basic_type_check(message, self.unadvertise_msg_fields)
         topic = message["topic"]
+
+        if Advertise.topics_glob is not None and Advertise.topics_glob:
+            self.protocol.log("debug", "Topic security glob enabled, checking topic: " + topic)
+            match = False
+            for glob in Advertise.topics_glob:
+                if (fnmatch.fnmatch(topic, glob)):
+                    self.protocol.log("debug", "Found match with glob " + glob + ", continuing unadvertisement...")
+                    match = True
+                    break
+            if not match:
+                self.protocol.log("warn", "No match found for topic, cancelling unadvertisement of: " + topic)
+                return
+        else:
+            self.protocol.log("debug", "No topic security glob, not checking unadvertisement.")
 
         # Now unadvertise the topic
         if topic not in self._registrations:

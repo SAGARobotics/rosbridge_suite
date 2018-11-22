@@ -30,9 +30,9 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-import Image
+from PIL import Image
 from base64 import standard_b64encode, standard_b64decode
-from StringIO import StringIO
+from rosbridge_library.util import StringIO
 from math import floor, ceil, sqrt
 
 
@@ -45,7 +45,7 @@ def encode(string):
     while length < bytes_needed:
         string += '\n'
         length += 1
-    i = Image.fromstring('RGB', (int(width), int(height)), string)
+    i = Image.frombytes('RGB', (int(width), int(height)), string)
     buff = StringIO()
     i.save(buff, "png")
     encoded = standard_b64encode(buff.getvalue())

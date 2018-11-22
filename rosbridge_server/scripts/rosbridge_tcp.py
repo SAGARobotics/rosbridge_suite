@@ -1,11 +1,25 @@
 #!/usr/bin/env python
 
-from rospy import init_node, get_param, loginfo, logerr
-from rosbridge_library.rosbridge_protocol import RosbridgeProtocol
+from __future__ import print_function
+from rospy import init_node, get_param, loginfo, logerr, on_shutdown, Publisher
+from rosbridge_server import RosbridgeTcpSocket
 
+from rosbridge_library.capabilities.advertise import Advertise
+from rosbridge_library.capabilities.publish import Publish
+from rosbridge_library.capabilities.subscribe import Subscribe
+from rosbridge_library.capabilities.advertise_service import AdvertiseService
+from rosbridge_library.capabilities.unadvertise_service import UnadvertiseService
+from rosbridge_library.capabilities.call_service import CallService
+
+from functools import partial
 from signal import signal, SIGINT, SIG_DFL
+from std_msgs.msg import Int32
 
-import SocketServer
+try:
+    import SocketServer
+except ImportError:
+    import socketserver as SocketServer
+
 import sys
 import time
 
@@ -13,109 +27,18 @@ import time
 
 #TODO: add new parameters to websocket version! those of rosbridge_tcp.py might not be needed, but the others should work well when adding them to .._websocket.py
 
-# Global ID seed for clients
-client_id_seed = 0
-clients_connected = 0
 
-# list of possible parameters ( with internal default values <-- get overwritten from parameter server and commandline)
-# rosbridge_tcp.py:
-port = 9090                             # integer (portnumber)
-host = ""                               # hostname / IP as string
-incoming_buffer = 65536                 # bytes
-socket_timeout = 10                     # seconds
-retry_startup_delay = 5                 # seconds
-# advertise_service.py:
-service_request_timeout = 600           # seconds
-check_response_delay = 0.01             # seconds
-wait_for_busy_service_provider = 0.01   # seconds
-max_service_requests = 1000000          # requests
-# defragmentation.py:
-fragment_timeout = 600                  # seconds
-# protocol.py:
-delay_between_messages = 0.01           # seconds
-max_message_size = None                 # bytes
-
-
-class RosbridgeTcpSocket(SocketServer.BaseRequestHandler):
-    """
-    TCP Socket server for rosbridge
-    """
-
-    busy = False
-    queue = []
-
-    def setup(self):
-        global client_id_seed, clients_connected
-        parameters = {
-           "port": port,
-           "host": host,
-           "incoming_buffer": incoming_buffer,
-           "socket_timeout": socket_timeout,
-           "retry_startup_delay": retry_startup_delay,
-           "service_request_timeout": service_request_timeout,
-           "check_response_delay": check_response_delay,
-           "wait_for_busy_service_provider": wait_for_busy_service_provider,
-           "max_service_requests": max_service_requests,
-           "fragment_timeout": fragment_timeout,
-           "delay_between_messages": delay_between_messages,
-           "max_message_size": max_message_size
-         }
-
-        try:
-            self.protocol = RosbridgeProtocol(client_id_seed, parameters = parameters)
-            self.protocol.outgoing = self.send_message
-            client_id_seed = client_id_seed + 1
-            clients_connected = clients_connected + 1
-            self.protocol.log("info", "connected. " + str(clients_connected) + " client total.")
-        except Exception as exc:
-            logerr("Unable to accept incoming connection.  Reason: %s", str(exc))
-        
-
-    def handle(self):
-        """
-        Listen for TCP messages
-        """
-        self.request.settimeout(socket_timeout)
-        while 1:
-            try:
-              data = self.request.recv(incoming_buffer)
-              # Exit on empty string
-              if data.strip() == '':
-                  break
-              elif len(data.strip()) > 0:
-                  #time.sleep(5)
-                  self.protocol.incoming(data.strip(''))
-              else:
-                  pass
-            except Exception, e:
-                pass
-                self.protocol.log("debug", "socket connection timed out! (ignore warning if client is only listening..)")
-
-    def finish(self):
-        """
-        Called when TCP connection finishes
-        """
-        global clients_connected
-        clients_connected = clients_connected - 1
-        self.protocol.finish()
-        self.protocol.log("info", "disconnected. " + str(clients_connected) + " client total." )
-
-    def send_message(self, message=None):
-        """
-        Callback from rosbridge
-        """
-
-        self.request.send(message)
-
+def shutdown_hook(server):
+        server.shutdown()
 
 if __name__ == "__main__":
     loaded = False
     retry_count = 0
     while not loaded:
         retry_count += 1
-        print "trying to start rosbridge TCP server.."
+        print("trying to start rosbridge TCP server..")
         try:
-            print ""
+            print("")
             init_node("rosbridge_tcp")
             signal(SIGINT, SIG_DFL)
 
@@ -131,21 +54,37 @@ if __name__ == "__main__":
 #TODO: check if ROS parameter server uses None string for 'None-value' or Null or something else, then change code accordingly
 
             # update parameters from parameter server or use default value ( second parameter of get_param )
-            port = get_param('/rosbridge/port', port)
-            host = get_param('/rosbridge/host', host)
-            incoming_buffer = get_param('/rosbridge/incoming_buffer', incoming_buffer)
-            socket_timeout = get_param('/rosbridge/socket_timeout', socket_timeout)
-            retry_startup_delay = get_param('/rosbridge/retry_startup_delay', retry_startup_delay)
-            service_request_timeout = get_param('/rosbridge/service_request_timeout', service_request_timeout)
-            check_response_delay = get_param('/rosbridge/check_response_delay', check_response_delay)
-            wait_for_busy_service_provider = get_param('/rosbridge/wait_for_busy_service_provider', wait_for_busy_service_provider)
-            max_service_requests = get_param('/rosbridge/max_service_requests', max_service_requests)
-            fragment_timeout = get_param('/rosbridge/fragment_timeout', fragment_timeout)
-            delay_between_messages = get_param('/rosbridge/delay_between_messages', delay_between_messages)
-            max_message_size = get_param('/rosbridge/max_message_size', max_message_size)
+            port = get_param('~port', 9090)
+            host = get_param('~host', '')
+            incoming_buffer = get_param('~incoming_buffer', RosbridgeTcpSocket.incoming_buffer)
+            socket_timeout = get_param('~socket_timeout', RosbridgeTcpSocket.socket_timeout)
+            retry_startup_delay = get_param('~retry_startup_delay', 5.0)  # seconds
+            fragment_timeout = get_param('~fragment_timeout', RosbridgeTcpSocket.fragment_timeout)
+            delay_between_messages = get_param('~delay_between_messages', RosbridgeTcpSocket.delay_between_messages)
+            max_message_size = get_param('~max_message_size', RosbridgeTcpSocket.max_message_size)
+            unregister_timeout = get_param('~unregister_timeout', RosbridgeTcpSocket.unregister_timeout)
+            bson_only_mode = get_param('~bson_only_mode', False)
+
             if max_message_size == "None":
                 max_message_size = None
 
+            # Get the glob strings and parse them as arrays.
+            RosbridgeTcpSocket.topics_glob = [
+                    element.strip().strip("'")
+                    for element in get_param('~topics_glob', '')[1:-1].split(',')
+                    if len(element.strip().strip("'")) > 0]
+            RosbridgeTcpSocket.services_glob = [
+                    element.strip().strip("'")
+                    for element in get_param('~services_glob', '')[1:-1].split(',')
+                    if len(element.strip().strip("'")) > 0]
+            RosbridgeTcpSocket.params_glob = [
+                    element.strip().strip("'")
+                    for element in get_param('~params_glob', '')[1:-1].split(',')
+                    if len(element.strip().strip("'")) > 0]
+            
+            # Publisher for number of connected clients
+            RosbridgeTcpSocket.client_count_pub = Publisher('client_count', Int32, queue_size=10, latch=True)
+            RosbridgeTcpSocket.client_count_pub.publish(0)
 
             # update parameters if provided via commandline
             # .. could implemented 'better' (value/type checking, etc.. )
@@ -154,7 +93,7 @@ if __name__ == "__main__":
                 if idx < len(sys.argv):
                     port = int(sys.argv[idx])
                 else:
-                    print "--port argument provided without a value."
+                    print("--port argument provided without a value.")
                     sys.exit(-1)
 
             if "--host" in sys.argv:
@@ -162,7 +101,7 @@ if __name__ == "__main__":
                 if idx < len(sys.argv):
                     host = str(sys.argv[idx])
                 else:
-                    print "--host argument provided without a value."
+                    print("--host argument provided without a value.")
                     sys.exit(-1)
 
             if "--incoming_buffer" in sys.argv:
@@ -170,7 +109,7 @@ if __name__ == "__main__":
                 if idx < len(sys.argv):
                     incoming_buffer = int(sys.argv[idx])
                 else:
-                    print "--incoming_buffer argument provided without a value."
+                    print("--incoming_buffer argument provided without a value.")
                     sys.exit(-1)
 
             if "--socket_timeout" in sys.argv:
@@ -178,7 +117,7 @@ if __name__ == "__main__":
                 if idx < len(sys.argv):
                     socket_timeout = int(sys.argv[idx])
                 else:
-                    print "--socket_timeout argument provided without a value."
+                    print("--socket_timeout argument provided without a value.")
                     sys.exit(-1)
 
             if "--retry_startup_delay" in sys.argv:
@@ -186,39 +125,7 @@ if __name__ == "__main__":
                 if idx < len(sys.argv):
                     retry_startup_delay = int(sys.argv[idx])
                 else:
-                    print "--retry_startup_delay argument provided without a value."
-                    sys.exit(-1)
-
-            if "--service_request_timeout" in sys.argv:
-                idx = sys.argv.index("--service_request_timeout") + 1
-                if idx < len(sys.argv):
-                    service_request_timeout = int(sys.argv[idx])
-                else:
-                    print "--service_request_timeout argument provided without a value."
-                    sys.exit(-1)
-
-            if "--check_response_delay" in sys.argv:
-                idx = sys.argv.index("--check_response_delay") + 1
-                if idx < len(sys.argv):
-                    check_response_delay = float(sys.argv[idx])
-                else:
-                    print "--check_response_delay argument provided without a value."
-                    sys.exit(-1)
-
-            if "--wait_for_busy_service_provider" in sys.argv:
-                idx = sys.argv.index("--wait_for_busy_service_provider") + 1
-                if idx < len(sys.argv):
-                    wait_for_busy_service_provider = float(sys.argv[idx])
-                else:
-                    print "--wait_for_busy_service_provider argument provided without a value."
-                    sys.exit(-1)
-
-            if "--max_service_requests" in sys.argv:
-                idx = sys.argv.index("--max_service_requests") + 1
-                if idx < len(sys.argv):
-                    max_service_requests = int(sys.argv[idx])
-                else:
-                    print "--max_service_requests argument provided without a value."
+                    print("--retry_startup_delay argument provided without a value.")
                     sys.exit(-1)
 
             if "--fragment_timeout" in sys.argv:
@@ -226,7 +133,7 @@ if __name__ == "__main__":
                 if idx < len(sys.argv):
                     fragment_timeout = int(sys.argv[idx])
                 else:
-                    print "--fragment_timeout argument provided without a value."
+                    print("--fragment_timeout argument provided without a value.")
                     sys.exit(-1)
 
             if "--delay_between_messages" in sys.argv:
@@ -234,7 +141,7 @@ if __name__ == "__main__":
                 if idx < len(sys.argv):
                     delay_between_messages = float(sys.argv[idx])
                 else:
-                    print "--delay_between_messages argument provided without a value."
+                    print("--delay_between_messages argument provided without a value.")
                     sys.exit(-1)
 
             if "--max_message_size" in sys.argv:
@@ -246,9 +153,77 @@ if __name__ == "__main__":
                     else:
                         max_message_size = int(value)
                 else:
-                    print "--max_message_size argument provided without a value. (can be None or <Integer>)"
+                    print("--max_message_size argument provided without a value. (can be None or <Integer>)")
                     sys.exit(-1)
-                    
+
+            if "--unregister_timeout" in sys.argv:
+                idx = sys.argv.index("--unregister_timeout") + 1
+                if idx < len(sys.argv):
+                    unregister_timeout = float(sys.argv[idx])
+                else:
+                    print("--unregister_timeout argument provided without a value.")
+                    sys.exit(-1)
+
+            # export parameters to handler class
+            RosbridgeTcpSocket.incoming_buffer = incoming_buffer
+            RosbridgeTcpSocket.socket_timeout = socket_timeout
+            RosbridgeTcpSocket.fragment_timeout = fragment_timeout
+            RosbridgeTcpSocket.delay_between_messages = delay_between_messages
+            RosbridgeTcpSocket.max_message_size = max_message_size
+            RosbridgeTcpSocket.unregister_timeout = unregister_timeout
+            RosbridgeTcpSocket.bson_only_mode = bson_only_mode
+
+
+            if "--topics_glob" in sys.argv:
+                idx = sys.argv.index("--topics_glob") + 1
+                if idx < len(sys.argv):
+                    value = sys.argv[idx]
+                    if value == "None":
+                        RosbridgeTcpSocket.topics_glob = []
+                    else:
+                        RosbridgeTcpSocket.topics_glob = [element.strip().strip("'") for element in value[1:-1].split(',')]
+                else:
+                    print("--topics_glob argument provided without a value. (can be None or a list)")
+                    sys.exit(-1)
+
+            if "--services_glob" in sys.argv:
+                idx = sys.argv.index("--services_glob") + 1
+                if idx < len(sys.argv):
+                    value = sys.argv[idx]
+                    if value == "None":
+                        RosbridgeTcpSocket.services_glob = []
+                    else:
+                        RosbridgeTcpSocket.services_glob = [element.strip().strip("'") for element in value[1:-1].split(',')]
+                else:
+                    print("--services_glob argument provided without a value. (can be None or a list)")
+                    sys.exit(-1)
+
+            if "--params_glob" in sys.argv:
+                idx = sys.argv.index("--params_glob") + 1
+                if idx < len(sys.argv):
+                    value = sys.argv[idx]
+                    if value == "None":
+                        RosbridgeTcpSocket.params_glob = []
+                    else:
+                        RosbridgeTcpSocket.params_glob = [element.strip().strip("'") for element in value[1:-1].split(',')]
+                else:
+                    print("--params_glob argument provided without a value. (can be None or a list)")
+                    sys.exit(-1)
+
+            if "--bson_only_mode" in sys.argv:
+                bson_only_mode = True
+
+            # To be able to access the list of topics and services, you must be able to access the rosapi services.
+            if RosbridgeTcpSocket.services_glob:
+                RosbridgeTcpSocket.services_glob.append("/rosapi/*")
+
+            Subscribe.topics_glob = RosbridgeTcpSocket.topics_glob
+            Advertise.topics_glob = RosbridgeTcpSocket.topics_glob
+            Publish.topics_glob = RosbridgeTcpSocket.topics_glob
+            AdvertiseService.services_glob = RosbridgeTcpSocket.services_glob
+            UnadvertiseService.services_glob = RosbridgeTcpSocket.services_glob
+            CallService.services_glob = RosbridgeTcpSocket.services_glob
+
             """
             ...END (parameter handling)
             """
@@ -256,12 +231,14 @@ if __name__ == "__main__":
 
             # Server host is a tuple ('host', port)
             # empty string for host makes server listen on all available interfaces
+            SocketServer.ThreadingTCPServer.allow_reuse_address = True
             server = SocketServer.ThreadingTCPServer((host, port), RosbridgeTcpSocket)
+            on_shutdown(partial(shutdown_hook, server))
 
             loginfo("Rosbridge TCP server started on port %d", port)
 
             server.serve_forever()
             loaded = True
-        except Exception, e:
+        except Exception as e:
             time.sleep(retry_startup_delay)
-    print "server loaded"
+    print("server loaded")
