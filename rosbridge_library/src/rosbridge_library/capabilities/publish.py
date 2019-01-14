@@ -88,7 +88,11 @@ class Publish(Capability):
             client_id = self.protocol.client_id
             manager.register(client_id, topic, latch=latch, queue_size=queue_size)
             self._published[topic] = True
-        	# Publish the message
+
+            # Get the message if one was provided
+            msg = message.get("msg", {})
+
+	        # Publish the message
             manager.publish(client_id, topic, msg, latch=latch, queue_size=queue_size)
         else:
             rospy.logwarn("dropping publishing of topic because it is invalid: %s not allowed", topic)

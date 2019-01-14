@@ -61,4 +61,3 @@ PKG = 'rosbridge_library'
 NAME = 'test_publish'
 if __name__ == '__main__':
     rostest.unitrun(PKG, NAME, TestAdvertise)
-

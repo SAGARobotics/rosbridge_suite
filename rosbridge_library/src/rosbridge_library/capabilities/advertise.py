@@ -83,7 +83,7 @@ class Advertise(Capability):
     def __init__(self, protocol):
         # Call superclas constructor
         Capability.__init__(self, protocol)
-	    
+
         self.protocol=protocol
 
         # Register the operations that this capability provides
@@ -102,7 +102,7 @@ class Advertise(Capability):
         self.basic_type_check(message, self.advertise_msg_fields)
         topic = message["topic"]
         msg_type = message["type"]
-	
+
         if self.is_permitted(topic,
                              self.protocol.advertisement_wl,
                              self.protocol.advertisement_bl):
@@ -135,8 +135,8 @@ class Advertise(Capability):
 
                 # Register, propagating any exceptions
                 self._registrations[topic].register_advertisement(msg_type, aid, latch, queue_size)
-            else:
-                rospy.logwarn("dropping advertising of topic because it is invalid: %s not allowed", topic)
+        else:
+            rospy.logwarn("dropping advertising of topic because it is invalid: %s not allowed", topic)
 
     def unadvertise(self, message):
         # Pull out the ID

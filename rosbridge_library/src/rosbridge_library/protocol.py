@@ -99,7 +99,7 @@ class Protocol:
         with shared resources
 
         """
-        
+
         self.client_id = client_id
         self.capabilities = []
         self.operations = {}
@@ -299,7 +299,7 @@ class Protocol:
         try:
             if has_binary(msg) or self.bson_only_mode:
                 return bson.BSON.encode(msg)
-            else:    
+            else:
                 return json.dumps(msg)
         except:
             if cid is not None:
@@ -328,6 +328,7 @@ class Protocol:
             else:
                 return json.loads(msg)
         except Exception as e:
+            print(msg)
             # if we did try to deserialize whole buffer .. first try to let self.incoming check for multiple/partial json-decodes before logging error
             # .. this means, if buffer is not == msg --> we tried to decode part of buffer
 
@@ -431,4 +432,3 @@ class Protocol:
     advertisement_bl = property(get_advertisement_bl, None, None, "advertisement_bl's docstring")
     subscription_bl = property(get_subscription_bl, None, None, "subscription_bl's docstring")
     service_bl = property(get_service_bl, None, None, "service_bl's docstring")
-
